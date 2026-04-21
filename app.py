@@ -2,7 +2,8 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import pickle
-import tensorflow as tf
+import torch
+import torch.nn as nn
 from sklearn.preprocessing import LabelEncoder
 import plotly.graph_objects as go
 import io
@@ -97,16 +98,63 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# ── PyTorch MLP (must match training architecture exactly) ────────────────────
+
+class MLP(nn.Module):
+    def __init__(self, input_dim):
+        super(MLP, self).__init__()
+        self.model = nn.Sequential(
+            nn.Linear(input_dim, 256),
+            nn.ReLU(),
+            nn.Dropout(0.4),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(64, 3)
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
 @st.cache_resource
 def load_assets():
-    model = tf.keras.models.load_model("diabetes_model.h5")
+    # ── Load encoders ──────────────────────────────────────────────────────────
     with open("encoders.pkl", "rb") as f:
         encoders = pickle.load(f)
-    with open("scaler (2).pkl", "rb") as f:
+
+    # ── Load scaler ───────────────────────────────────────────────────────────
+    # Change filename if yours differs (e.g. "scaler.pkl")
+    with open("scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
+
+    # ── Load PyTorch model ────────────────────────────────────────────────────
+    # The model was saved with torch.save(model, "diabetes_model.pkl")
+    # OR torch.save(model.state_dict(), "diabetes_model.pkl")
+    # We handle both cases below.
+    with open("diabetes_model.pkl", "rb") as f:
+        obj = pickle.load(f)
+
+    if isinstance(obj, dict):
+        # state_dict was saved — rebuild the model
+        input_dim = len(scaler.feature_names_in_)
+        model = MLP(input_dim)
+        model.load_state_dict(obj)
+    else:
+        # full model object was saved
+        model = obj
+
+    model.eval()
     return model, encoders, scaler
 
+
 model, encoders, scaler = load_assets()
+
+
+# ── Constants ─────────────────────────────────────────────────────────────────
 
 CATEGORICAL_COLS = [
     "race", "gender", "age", "weight",
@@ -142,7 +190,6 @@ MED_KEYS = [
     "metformin-rosiglitazone","metformin-pioglitazone",
 ]
 
-# canonical lookup: normalised label → dict key
 MED_LABEL_MAP = {k.replace("-","").lower(): k for k in MED_KEYS}
 MED_LABEL_MAP.update({
     "glyburidemetformin":           "glyburide-metformin",
@@ -269,7 +316,7 @@ def generate_pdf_report(raw_input, pred, probs, patient_name="N/A", patient_id="
     disc_style  = ParagraphStyle("disc",  fontName="Helvetica-Oblique", fontSize=7,
                                   textColor=muted, alignment=TA_CENTER)
 
-    def mk(txt, fname="Helvetica", size=7.5, clr=None):
+    def mk(txt="", fname="Helvetica", size=7.5, clr=None):
         return ParagraphStyle("_", fontName=fname, fontSize=size, textColor=clr or muted)
 
     def sec(text):
@@ -429,9 +476,21 @@ def ss(key, default):
 
 def idx_in(lst, val, fallback=0):
     try:
-        return lst.index(val)
+        return list(lst).index(val)
     except ValueError:
         return fallback
+
+
+# ── Inference (PyTorch) ───────────────────────────────────────────────────────
+
+def predict_pytorch(encoded_row_scaled: np.ndarray):
+    """Run inference with the PyTorch model. Returns (pred_class, probs_array)."""
+    tensor = torch.tensor(encoded_row_scaled, dtype=torch.float32)
+    with torch.no_grad():
+        logits = model(tensor)                          # shape: (1, 3)
+        probs  = torch.softmax(logits, dim=1).numpy()[0]
+    pred = int(np.argmax(probs))
+    return pred, probs
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────
@@ -440,7 +499,7 @@ st.markdown('<p class="sub-text">Enter patient details or upload a PDF to auto-f
             unsafe_allow_html=True)
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# ── Patient Record Identifier ────────────────────────────────────────────────
+# ── Patient Record Identifier ─────────────────────────────────────────────────
 st.markdown('<div class="section-title">Patient Record Identifier</div>', unsafe_allow_html=True)
 st.markdown('<div class="record-tag">SINGLE PATIENT RECORD</div>', unsafe_allow_html=True)
 ci1, ci2, ci3 = st.columns(3)
@@ -450,7 +509,7 @@ record_date  = ci3.text_input("Record Date",  datetime.now().strftime("%Y-%m-%d"
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# ── PDF Upload ───────────────────────────────────────────────────────────────
+# ── PDF Upload ────────────────────────────────────────────────────────────────
 st.markdown('<div class="section-title">Import from PDF</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="upload-zone">'
@@ -595,6 +654,7 @@ if st.button("PREDICT READMISSION"):
         **med_values
     }
 
+    # ── Encode categoricals ───────────────────────────────────────────────────
     encoded = dict(raw)
     for col in CATEGORICAL_COLS:
         val = str(encoded[col])
@@ -604,11 +664,13 @@ if st.button("PREDICT READMISSION"):
         else:
             encoded[col] = 0
 
+    # ── Scale ─────────────────────────────────────────────────────────────────
     fitted_cols = scaler.feature_names_in_.tolist()
     row         = pd.DataFrame([encoded])[fitted_cols].astype(float)
-    row_scaled  = scaler.transform(row)
-    probs       = model.predict(row_scaled, verbose=0)[0]
-    pred        = int(np.argmax(probs))
+    row_scaled  = scaler.transform(row)          # numpy array, shape (1, n_features)
+
+    # ── PyTorch inference ─────────────────────────────────────────────────────
+    pred, probs = predict_pytorch(row_scaled)
 
     labels  = {0: "NO Readmission", 1: "Readmitted < 30 days", 2: "Readmitted > 30 days"}
     classes = {0: "result-no", 1: "result-lt30", 2: "result-gt30"}
@@ -688,7 +750,7 @@ if st.button("PREDICT READMISSION"):
     col_a.metric("Time in Hospital", f"{time_in_hospital} days")
     col_b.metric("Lab Procedures",   f"{num_lab_procedures}")
     col_c.metric("Medications",       f"{num_medications}")
-    col_d.metric("Diagnoses",         f"{number_diagnoses}")
+    col_d.metric("Number of Diagnoses", f"{number_diagnoses}")
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown('<div class="section-title">Medical Report</div>', unsafe_allow_html=True)
