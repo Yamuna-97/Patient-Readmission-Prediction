@@ -128,6 +128,7 @@ def load_assets():
 
     # ── Load scaler ───────────────────────────────────────────────────────────
     # Change filename if yours differs (e.g. "scaler.pkl")
+
     with open("scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
 
