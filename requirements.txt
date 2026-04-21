@@ -2,9 +2,9 @@ streamlit==1.37.1
 numpy==1.26.4
 pandas==2.1.4
 scikit-learn==1.6.1
-imblearn
+imbalanced-learn==0.12.4
 plotly
 pypdf
 reportlab
 
-torch==2.1.2
+torch==2.1.2+cpu
