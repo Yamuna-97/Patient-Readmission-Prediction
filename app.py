@@ -719,7 +719,7 @@ if st.button("PREDICT READMISSION"):
             font=dict(color="#8faecb", family="monospace", size=10),
             margin=dict(l=20, r=20, t=30, b=20), height=280
         )
-        st.plotly_chart(fig_radar, use_container_width=True)
+        st.plotly_chart(fig_radar, width="stretch")
 
     st.markdown('<div class="section-title">Probability Distribution</div>', unsafe_allow_html=True)
     bar_colors = ["#2ecc71", "#e74c3c", "#f39c12"]
@@ -744,7 +744,7 @@ if st.button("PREDICT READMISSION"):
         xaxis=dict(tickfont=dict(color="#dce8f5", size=12)),
         showlegend=False, margin=dict(l=40,r=40,t=30,b=40), height=300,
     )
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig_bar, width="stretch")
 
     st.markdown('<div class="section-title">Key Clinical Indicators</div>', unsafe_allow_html=True)
     col_a, col_b, col_c, col_d = st.columns(4)
