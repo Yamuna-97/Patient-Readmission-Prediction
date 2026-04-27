@@ -97,9 +97,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
-# ── PyTorch MLP (must match training architecture exactly) ────────────────────
-
 class MLP(nn.Module):
     def __init__(self, input_dim):
         super(MLP, self).__init__()
@@ -127,7 +124,6 @@ def load_assets():
         encoders = pickle.load(f)
 
     # ── Load scaler ───────────────────────────────────────────────────────────
-    # Change filename if yours differs (e.g. "scaler.pkl")
 
     with open("scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
@@ -135,17 +131,14 @@ def load_assets():
     # ── Load PyTorch model ────────────────────────────────────────────────────
     # The model was saved with torch.save(model, "diabetes_model.pkl")
     # OR torch.save(model.state_dict(), "diabetes_model.pkl")
-    # We handle both cases below.
     with open("diabetes_model.pkl", "rb") as f:
         obj = pickle.load(f)
 
     if isinstance(obj, dict):
-        # state_dict was saved — rebuild the model
         input_dim = len(scaler.feature_names_in_)
         model = MLP(input_dim)
         model.load_state_dict(obj)
     else:
-        # full model object was saved
         model = obj
 
     model.eval()
