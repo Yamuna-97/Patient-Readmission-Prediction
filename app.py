@@ -119,18 +119,13 @@ class MLP(nn.Module):
 
 @st.cache_resource
 def load_assets():
-    # ── Load encoders ──────────────────────────────────────────────────────────
     with open("encoders.pkl", "rb") as f:
         encoders = pickle.load(f)
 
-    # ── Load scaler ───────────────────────────────────────────────────────────
 
     with open("scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
 
-    # ── Load PyTorch model ────────────────────────────────────────────────────
-    # The model was saved with torch.save(model, "diabetes_model.pkl")
-    # OR torch.save(model.state_dict(), "diabetes_model.pkl")
     with open("diabetes_model.pkl", "rb") as f:
         obj = pickle.load(f)
 
@@ -144,11 +139,7 @@ def load_assets():
     model.eval()
     return model, encoders, scaler
 
-
 model, encoders, scaler = load_assets()
-
-
-# ── Constants ─────────────────────────────────────────────────────────────────
 
 CATEGORICAL_COLS = [
     "race", "gender", "age", "weight",
@@ -194,7 +185,6 @@ MED_LABEL_MAP.update({
 })
 
 
-# ── PDF parser ────────────────────────────────────────────────────────────────
 
 def parse_pdf_fields(pdf_bytes: bytes) -> dict:
     reader = PdfReader(io.BytesIO(pdf_bytes))
