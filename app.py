@@ -116,7 +116,6 @@ class MLP(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-
 @st.cache_resource
 def load_assets():
     with open("encoders.pkl", "rb") as f:
@@ -263,9 +262,6 @@ def parse_pdf_fields(pdf_bytes: bytes) -> dict:
     parsed["diabetesMed"] = dm_raw if dm_raw in ["No","Yes"] else "No"
 
     return parsed
-
-
-# ── PDF report generator ──────────────────────────────────────────────────────
 
 def generate_pdf_report(raw_input, pred, probs, patient_name="N/A", patient_id="N/A"):
     buffer = io.BytesIO()
